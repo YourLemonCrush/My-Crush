@@ -128,82 +128,88 @@
   // *** PASTE YOUR FIREBASE REALTIME DATABASE URL HERE ***
   const FIREBASE_URL = "https://my-crush-278a7-default-rtdb.asia-southeast1.firebasedatabase.app/";
 
-  // *** EXACT MATCH LIST — names that are blocked entirely ***
-  const listA = ["cunt", "bob"];
-  const listB = ["text2", "diana"];
+  // *** EXACT MATCH LIST — names blocked entirely ***
+  const listA = ["alice", "bob"];
+  const listB = ["charlie", "diana"];
   const listC = ["edward", "fiona"];
   const allNames = [...listA, ...listB, ...listC];
 
-  // *** CONTAINS LIST — if any of these words appear anywhere in the input, it is blocked ***
+  // *** CONTAINS LIST — blocks if any of these appear anywhere in the input ***
   const blockedWords = [
-    "ass",
-    "arse"
-    "fag",
-    "bitch",
-    "cunt",
-"rape"
-
-    // Add as many as you need
+    "badword1",
+    "badword2",
+    "badword3"
   ];
 
   const nameDisplay = document.getElementById("current-name");
   const statusMsg = document.getElementById("status-msg");
   const input = document.getElementById("name-input");
+  const btn = document.getElementById("upload-btn");
 
-  // Check if the input contains any blocked word as a substring
   function containsBlockedWord(text) {
     const lower = text.toLowerCase();
     return blockedWords.some(word => lower.includes(word.toLowerCase()));
   }
 
-  // Load the current name from Firebase on page load
   function loadCurrentName() {
     fetch(`${FIREBASE_URL}/crush.json`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("Bad response");
+        return r.json();
+      })
       .then(data => {
-        nameDisplay.textContent = data && data.name ? data.name : "—";
+        // Only update display once Firebase responds with real data
+        if (data && data.name) {
+          nameDisplay.textContent = data.name;
+        } else {
+          nameDisplay.textContent = "—";
+        }
       })
       .catch(() => {
+        // If Firebase URL is wrong or unreachable, show a clear message
         nameDisplay.textContent = "—";
+        statusMsg.style.color = "white";
+        statusMsg.textContent = "Could not connect. Check Firebase URL.";
       });
   }
 
   loadCurrentName();
   setInterval(loadCurrentName, 5000);
 
-  document.getElementById("upload-btn").addEventListener("click", function () {
+  btn.addEventListener("click", function () {
     const rawInput = input.value.trim();
     const lowerInput = rawInput.toLowerCase();
 
     statusMsg.style.color = "white";
+    statusMsg.textContent = "";
 
     if (rawInput === "") {
       statusMsg.textContent = "Please type a name first.";
       return;
     }
 
-    // Check 1: exact match block list
-    if (allNames.includes(lowerInput)) {
+    // Run ALL checks before anything is displayed or uploaded
+    if (allNames.includes(lowerInput) || containsBlockedWord(rawInput)) {
       statusMsg.textContent = "That name is not available.";
       input.value = "";
       return;
     }
 
-    // Check 2: contains a blocked word anywhere within the input
-    if (containsBlockedWord(rawInput)) {
-      statusMsg.textContent = "That name is not available.";
-      input.value = "";
-      return;
-    }
+    // Checks passed — disable button to prevent double-submissions
+    btn.disabled = true;
+    btn.textContent = "Uploading...";
 
-    // Passed both checks — upload to Firebase
     fetch(`${FIREBASE_URL}/crush.json`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: rawInput })
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("Upload failed");
+        return r.json();
+      })
       .then(() => {
+        // Only update the display AFTER Firebase confirms the write
         nameDisplay.textContent = rawInput;
         statusMsg.style.color = "#FFD700";
         statusMsg.textContent = "Uploaded!";
@@ -211,8 +217,12 @@
         setTimeout(() => statusMsg.textContent = "", 3000);
       })
       .catch(() => {
-        statusMsg.style.color = "white";
         statusMsg.textContent = "Upload failed. Please try again.";
+      })
+      .finally(() => {
+        // Re-enable button regardless of outcome
+        btn.disabled = false;
+        btn.textContent = "Upload";
       });
   });
 </script>
